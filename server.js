@@ -4,44 +4,50 @@ import fetch from "node-fetch";
 const app = express();
 app.use(express.json());
 
-// memory store per player
-const sessions = {};
+// Replace with your OpenAI API key or any AI service you use
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
 app.post("/chat", async (req, res) => {
   const { prompt, playerId } = req.body;
-  if (!prompt) return res.status(400).json({ error: "Missing prompt" });
 
-  // initialize session
-  if (!sessions[playerId]) sessions[playerId] = [];
+  if (!prompt) {
+    return res.json({ reply: "No prompt received." });
+  }
 
-  // keep last few messages only
-  const history = sessions[playerId];
-  history.push({ role: "user", content: prompt });
-  if (history.length > 6) history.shift();
+  try {
+    // Call OpenAI API (ChatGPT)
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${OPENAI_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: "gpt-3.5-turbo",
+        messages: [
+          { role: "system", content: "You are a friendly Roblox NPC with personality. Loves white, hates black, wears a ghost dunce cap." },
+          { role: "user", content: prompt }
+        ],
+        max_tokens: 50
+      })
+    });
 
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: "You are a friendly, helpful Roblox NPC who remembers short conversations." },
-        ...history
-      ],
-      max_tokens: 120
-    })
-  });
+    const data = await response.json();
+    const aiReply = data.choices?.[0]?.message?.content || "Hmm... I have no idea.";
 
-  const data = await response.json();
-  const reply = data.choices?.[0]?.message?.content || "I'm not sure what to say.";
+    res.json({ reply: aiReply });
 
-  // save AI reply into history
-  history.push({ role: "assistant", content: reply });
-
-  res.json({ reply });
+  } catch (err) {
+    console.error(err);
+    res.json({ reply: "I'm having trouble thinking right now." });
+  }
 });
 
-app.listen(3000, () => console.log("AI proxy with memory running on port 3000"));
+// Health check endpoint
+app.get("/", (req, res) => res.send("Proxy running"));
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Proxy running on port ${PORT}`);
+});
+
